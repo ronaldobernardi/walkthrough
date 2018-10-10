@@ -16,13 +16,13 @@ options(encoding = "UTF-8")
 ui <- fluidPage(
   
   # Application title
-  titlePanel("Preços de hortifrutigrangeiros na CEASA - RS"),
+  titlePanel("Preços de Hortifrutigrangeiros na CEASA - RS"),
   
   # Seleção de produto
   sidebarLayout(
     sidebarPanel(width = 3,
                  selectizeInput(inputId = "Produto", label = "Produto", choices = c("Escolha um produto" = "", produtos)),
-                 checkboxInput(inputId = "CorrigirIPCA", label = "Preços corrigidos", value = FALSE),
+                 checkboxInput(inputId = "CorrigirIPCA", label = "Preços Corrigidos(IPCA)", value = FALSE),
                  selectizeInput(inputId = "Forecast", label = "Forecast Preço", choices = c("Sem Forecast" = "", tipos_precos))
     ),
     

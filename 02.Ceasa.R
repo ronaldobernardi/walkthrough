@@ -16,7 +16,10 @@ library(lubridate)
 
 ## Operações de encadeamento entre funções
 library(magrittr)
+#########################################################
+# Chamada do script 01.Estacoes.R
 
+source(file = "01.Estacoes.R")
 
 # Arquivo que gerei extraíndo dados do site da CEASA - RS
 ceasa <- read_csv("Data/ceasa.csv")
@@ -30,24 +33,26 @@ View(ceasa)
 # Um resumo dos dados em cada variável da tabela
 summary(ceasa)
 
-# Modificação de um tipo de dado
+# Modificação de um tipo de dado, neste exemplo "unid_medida" esta como character na origem
 ceasa %<>% mutate(unid_medida = factor(unid_medida))
 
+# Um resumo com a coluna "unid_medida" alterada para factor<fct>
 summary(ceasa)
 
-# Todos os nomes dos produtos
-distinct(ceasa, produto) %>% 
-  arrange(produto) %>% 
-  View()
+# Todos os nomes dos produtos, distintos, guardados na variavel "count_produtos"
+count_produtos <-
+  distinct(ceasa, produto) %>% 
+  arrange(produto)
+#View()
 
 # Exibição dos tipos das variáveis atualizada
 ceasa
 
 # Temos muitos produtos, mas todos na mesma data?
-count(ceasa, data)
-count(ceasa, produto)
+count(ceasa, data) # 776
+count(ceasa, produto) # 182
 
-# Ajuste de nome de dois produtos e remoção de uma variável que não utilizaremos
+# Ajuste de nome de dois produtos, e remoção de uma variável("unit") que não utilizaremos
 ceasa %<>%
   mutate(produto = case_when(
     str_detect(produto, "BATATA BRANCA") ~ "BATATA INGLESA",
@@ -63,19 +68,21 @@ intervalo_data_produtos <-
   mutate(duracao = interval(primeira_data, ultima_data) %>% as.numeric("days"))
 
 # Comparar duracao com quantidade de registros por produto. Qual a diferença?
-arrange(intervalo_data_produtos, desc(ultima_data, duracao)) 
+intervalo_data_produtos2 <- arrange(intervalo_data_produtos, desc(ultima_data, duracao))
 
 # Remoção de produtos que não estavam presentes no intervalo de extração do site
-produtos_recentes <- 
-  filter(intervalo_data_produtos, (ultima_data == max(ceasa$data)) & (primeira_data == min(ceasa$data)))
+produtos_recentes <-   filter(intervalo_data_produtos, (ultima_data == max(ceasa$data)) & (primeira_data == min(ceasa$data)))
 
-ceasa_produtos_recentes <-
-  semi_join(ceasa, produtos_recentes, by="produto")
+# Inclusão das demais colunas do ceasa
+ceasa_produtos_recentes <-   semi_join(ceasa, produtos_recentes, by="produto")
 
-scales::percent(nrow(ceasa_produtos_recentes) / nrow(ceasa))
+perc <- scales::percent(nrow(ceasa_produtos_recentes) / nrow(ceasa))
 
 # Parece que alguns produtos possuem "buraco" maior no intervalo de datas
 count(ceasa_produtos_recentes, produto) %>%
+  summary()
+
+count(ceasa, produto) %>%
   summary()
 
 # Vamos manter somente os produtos presentes em todos os dias do período de extração dos dados do site
@@ -87,21 +94,25 @@ produtos_presentes_todos_dias <-
 ceasa_produtos_recentes %<>%
   semi_join(produtos_presentes_todos_dias, by="produto")
 
-scales::percent(nrow(ceasa_produtos_recentes) / nrow(ceasa))
+perc2 <- scales::percent(nrow(ceasa_produtos_recentes) / nrow(ceasa))
 
-# Criação de registros para as datas sem preços (finais de semana, feriados, datas com erro de extração)
+# Criação de registros para as datas sem preços
+# (finais de semana, feriados, datas com erro de extração)
 intervalo_datas_completo_produto <- 
   ceasa_produtos_recentes %>%
   group_by(produto) %>%
   expand(datas = full_seq(c(min(data), max(data)), 1)) %>%
   ungroup()
 
+#full_seq(x, period, tol = 1e-06)
+#full_seq(c(1, 2, 4, 5, 10), 1)
+
 ceasa_produtos_recentes %<>%
   right_join(intervalo_datas_completo_produto, by=c("produto", "data" = "datas"))
 
 ceasa_produtos_recentes
 
-# Completa registros criados utilizando os dados de preço da próxima data com preços capturados
+# Completa os registros criados utilizando os dados de preço da próxima data com preços capturados
 ceasa_produtos_intervalo_completo <-
   ceasa_produtos_recentes %>%
   group_by(produto) %>%
@@ -114,18 +125,19 @@ ceasa_produtos_intervalo_completo
 summary(ceasa_produtos_intervalo_completo)
 
 # Qual o tamanho dos objetos?
-format(object.size(ceasa), units = "Mb")
+ceasa_size <- format(object.size(ceasa), units = "Mb")
+ceasa_full_size <- format(object.size(ceasa_produtos_intervalo_completo), units = "Mb")
 rm(ceasa, ceasa_produtos_recentes, produtos_presentes_todos_dias, intervalo_datas_completo_produto, intervalo_data_produtos, produtos_recentes)
-format(object.size(ceasa_produtos_intervalo_completo), units = "Mb")
 
-# Visualização rápida da variação dos preços de um produto ao longo do tempo
+# Visualização rápida da variação dos preços de um produto(ABACATE) ao longo do tempo(ano)
 filter(ceasa_produtos_intervalo_completo, produto == "ABACATE") %>%
   ggplot(aes(x=data)) +
   geom_line(aes(y=preco_min), color="green") +
   geom_line(aes(y=preco_med), color="yellow") +
   geom_line(aes(y=preco_max), color="red")
 
-# Visualização rápida da variação com linha de tendência. Atentar para a transformação nos dados e legenda
+# Visualização rápida da variação com linha de tendência. 
+# Atentar para a transformação nos dados e legenda
 ceasa_produtos_intervalo_completo %>%
   select(produto, data, preco_min:preco_max) %>%
   filter(produto == "ABACATE") %>%
@@ -134,8 +146,9 @@ ceasa_produtos_intervalo_completo %>%
   geom_line() +
   geom_smooth(method = "lm")
 
+# Complemento das estacoes do ano
 estacoes <- estacoes_periodo( year(min(ceasa_produtos_intervalo_completo$data))
-                              , year(max(ceasa_produtos_intervalo_completo$data)))
+                             , year(max(ceasa_produtos_intervalo_completo$data)))
 
 # Algumas modificações para formatação do gráfico tornam a sua composição mais extensa
 ceasa_produtos_intervalo_completo %>%
@@ -193,7 +206,7 @@ ceasa_produtos_intervalo_completo %>%
 # Últimos dias devem estar sem preço corrigido
 tail(ceasa_produtos_intervalo_completo_com_ipca)
 
-format(object.size(ceasa_produtos_intervalo_completo_com_ipca), units = "Mb")
+ceasa_ipca_size <- format(object.size(ceasa_produtos_intervalo_completo_com_ipca), units = "Mb")
 
 # Mesma visualização que a anterior, com preços corrigidos 
 ceasa_produtos_intervalo_completo_com_ipca %>%
@@ -238,10 +251,10 @@ variacao_percentual_preco_produtos %>%
   scale_x_continuous(breaks = seq(from = 0, to = 4, by = 0.25)) +
   facet_wrap(~ mes, nrow = 4, ncol = 3)
 
-filter(variacao_percentual_preco_produtos, (perc >= 2)) %>%
+produto_variacao_mensal <- filter(variacao_percentual_preco_produtos, (perc >= 2)) %>%
   count(produto, mes) %>%
-  spread(key = mes, value=n) %>%
-  View()
+  spread(key = mes, value=n)
+#  View()
 
 # produtos com maiores variações (metade (ou mais) que média e o dobro (ou mais) que a média)
 variacao_percentual_preco_produtos %>%
@@ -252,5 +265,6 @@ variacao_percentual_preco_produtos %>%
   theme_bw()
 
 # armazena o resultado final em formato próprio do R
-write_rds(ceasa_produtos_intervalo_completo_com_ipca, path = "Data/dados_finais_produtos_ceasa.rds.gz", compress = "gz")
+write_rds(ceasa_produtos_intervalo_completo_com_ipca, 
+          path = "Data/dados_finais_produtos_ceasa.rds.gz", compress = "gz")
 
